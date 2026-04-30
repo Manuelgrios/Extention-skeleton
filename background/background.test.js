@@ -79,6 +79,11 @@ function createChromeMock(initialStorage = {}) {
       }
     },
     tabs: {
+      create: jest.fn((properties, callback) => {
+        if (callback) {
+          callback({ id: 99, ...properties });
+        }
+      }),
       query: jest.fn((query, callback) => callback([{ id: 42, windowId: 7 }])),
       update: jest.fn((tabId, properties, callback) => {
         if (callback) {
@@ -188,7 +193,7 @@ describe("FocusKit background service worker", () => {
 
   test("fires a completion notification and broadcasts state when the alarm expires", async () => {
     jest.spyOn(Date, "now").mockReturnValue(2000000);
-    const { chrome } = loadBackground({
+    const { background, chrome } = loadBackground({
       notifications: true,
       pomodoroState: {
         remainingSeconds: 1,
@@ -216,6 +221,31 @@ describe("FocusKit background service worker", () => {
       { action: "pomodoro:stateChanged", state: chrome.__storage.pomodoroState },
       expect.any(Function)
     );
+    expect(chrome.tabs.create).toHaveBeenCalledWith(
+      { url: background.POMODORO_COMPLETION_VIDEO_URL },
+      expect.any(Function)
+    );
+
+    Date.now.mockRestore();
+  });
+
+  test("opens the completion placeholder only once for a completed session", async () => {
+    jest.spyOn(Date, "now").mockReturnValue(2000000);
+    const { chrome } = loadBackground({
+      notifications: true,
+      pomodoroCompletionVideoOpened: false,
+      pomodoroState: {
+        remainingSeconds: 1,
+        isRunning: true,
+        lastUpdatedAt: 1000
+      }
+    });
+
+    await chrome.__listeners.alarms[0]({ name: "focuskit:pomodoro" });
+    await chrome.__listeners.alarms[0]({ name: "focuskit:pomodoro" });
+
+    expect(chrome.tabs.create).toHaveBeenCalledTimes(1);
+    expect(chrome.__storage.pomodoroCompletionVideoOpened).toBe(true);
 
     Date.now.mockRestore();
   });

@@ -20,6 +20,8 @@ const POMODORO_ALARM_NAME = "focuskit:pomodoro";
 const POMODORO_COMPLETE_NOTIFICATION_ID = "focuskit-pomodoro-complete";
 // Separate id prevents the break notification overwriting the complete notification.
 const POMODORO_BREAK_NOTIFICATION_ID = "focuskit-pomodoro-break";
+const POMODORO_COMPLETION_VIDEO_OPENED_KEY = "pomodoroCompletionVideoOpened";
+const POMODORO_COMPLETION_VIDEO_URL = "https://www.youtube.com/shorts/BdzZVvWoP-Y";
 
 const MESSAGE_ACTIONS = {
   ping: "ping",
@@ -99,7 +101,10 @@ async function handleMessageAsync(message) {
   }
 
   if (message.action === MESSAGE_ACTIONS.pomodoroStart) {
-    return { success: true, state: await updatePomodoroState(startPomodoro, true) };
+    const state = await updatePomodoroState(startPomodoro, true);
+    await setStorage({ [POMODORO_COMPLETION_VIDEO_OPENED_KEY]: false });
+
+    return { success: true, state };
   }
 
   if (message.action === MESSAGE_ACTIONS.pomodoroPause) {
@@ -108,7 +113,10 @@ async function handleMessageAsync(message) {
 
   if (message.action === MESSAGE_ACTIONS.pomodoroReset) {
     const state = resetPomodoro();
-    await setStorage({ [POMODORO_STORAGE_KEY]: state });
+    await setStorage({
+      [POMODORO_STORAGE_KEY]: state,
+      [POMODORO_COMPLETION_VIDEO_OPENED_KEY]: false
+    });
     await clearPomodoroAlarm();
     broadcastPomodoroState(state);
 
@@ -122,7 +130,10 @@ async function handleMessageAsync(message) {
 
     const previousState = await readPomodoroState();
     const state = applyPomodoroDebugTime(previousState, message.minutes, message.seconds);
-    await setStorage({ [POMODORO_STORAGE_KEY]: state });
+    await setStorage({
+      [POMODORO_STORAGE_KEY]: state,
+      [POMODORO_COMPLETION_VIDEO_OPENED_KEY]: false
+    });
     await clearPomodoroAlarm();
     broadcastPomodoroState(state);
 
@@ -154,6 +165,7 @@ async function handleAlarm(alarm) {
     if (previousState.isRunning && previousState.remainingSeconds > 0) {
       // Notify for session end. Then check if a break phase is starting.
       await notifyPomodoroComplete();
+      await openPomodoroCompletionPlaceholderOnce();
 
       // If pomodoroState transitions into a break after completion, notify break start.
       // A break phase is indicated when the next cycle sets isBreak = true.
@@ -162,6 +174,29 @@ async function handleAlarm(alarm) {
       }
     }
   }
+}
+
+// Temporary removable Pomodoro completion placeholder.
+async function openPomodoroCompletionPlaceholderOnce() {
+  const data = await getStorage([POMODORO_COMPLETION_VIDEO_OPENED_KEY]);
+
+  if (data[POMODORO_COMPLETION_VIDEO_OPENED_KEY]) {
+    return;
+  }
+
+  await openPomodoroCompletionVideo();
+  await setStorage({ [POMODORO_COMPLETION_VIDEO_OPENED_KEY]: true });
+}
+
+function openPomodoroCompletionVideo() {
+  return new Promise(resolve => {
+    if (!chrome.tabs || !chrome.tabs.create) {
+      resolve();
+      return;
+    }
+
+    chrome.tabs.create({ url: POMODORO_COMPLETION_VIDEO_URL }, () => resolve());
+  });
 }
 
 // Read, normalize, persist, and return the current timer state.
@@ -382,6 +417,8 @@ if (typeof module !== "undefined") {
     MESSAGE_ACTIONS,
     POMODORO_ALARM_NAME,
     POMODORO_BREAK_NOTIFICATION_ID,
+    POMODORO_COMPLETION_VIDEO_OPENED_KEY,
+    POMODORO_COMPLETION_VIDEO_URL,
     POMODORO_COMPLETE_NOTIFICATION_ID,
     applyFocusMode,
     handleAlarm,
@@ -390,6 +427,8 @@ if (typeof module !== "undefined") {
     handleMessageAsync,
     handleStartup,
     notifyBreakStart,
-    notifyPomodoroComplete
+    notifyPomodoroComplete,
+    openPomodoroCompletionPlaceholderOnce,
+    openPomodoroCompletionVideo
   };
 }
