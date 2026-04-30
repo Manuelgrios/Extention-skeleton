@@ -9,6 +9,7 @@ const {
   createInitialPomodoroState,
   formatTime,
   pausePomodoro,
+  applyPomodoroDebugTime,
   resetPomodoro,
   restorePomodoroState,
   startPomodoro,
@@ -16,7 +17,7 @@ const {
 } = pomodoroStateHelpers;
 
 // Mutable popup session state; pure helpers below make this easy to test separately.
-let pomodoroState = createInitialPomodoroState();
+let pomodoroState = createInitialPomodoroState(0);
 let pomodoroIntervalId = null;
 
 // Swap the Tools list for the Pomodoro panel and hydrate saved timer state.
@@ -61,7 +62,20 @@ function getPomodoroPanel() {
       <button class="pomodoro-button" type="button" id="pomodoroStart">Start</button>
       <button class="pomodoro-button" type="button" id="pomodoroPause">Pause</button>
       <button class="pomodoro-button" type="button" id="pomodoroReset">Reset</button>
+      <button class="pomodoro-button secondary" type="button" id="pomodoroDebugToggle">Debug Time</button>
       <button class="pomodoro-button secondary" type="button" id="pomodoroClose">Close</button>
+    </div>
+    <div class="pomodoro-debug-panel" id="pomodoroDebugPanel" hidden>
+      <label class="pomodoro-debug-field">
+        <span>Minutes</span>
+        <input class="pomodoro-debug-input" type="number" id="pomodoroDebugMinutes" min="0" step="1" value="25" />
+      </label>
+      <label class="pomodoro-debug-field">
+        <span>Seconds</span>
+        <input class="pomodoro-debug-input" type="number" id="pomodoroDebugSeconds" min="0" max="59" step="1" value="0" />
+      </label>
+      <button class="pomodoro-button" type="button" id="pomodoroDebugApply">Apply</button>
+      <p class="pomodoro-debug-error" id="pomodoroDebugError" role="alert" hidden>Enter non-negative minutes and 0-59 seconds.</p>
     </div>
   `;
 
@@ -70,6 +84,8 @@ function getPomodoroPanel() {
   panel.querySelector("#pomodoroStart").addEventListener("click", handlePomodoroStart);
   panel.querySelector("#pomodoroPause").addEventListener("click", handlePomodoroPause);
   panel.querySelector("#pomodoroReset").addEventListener("click", handlePomodoroReset);
+  panel.querySelector("#pomodoroDebugToggle").addEventListener("click", togglePomodoroDebugPanel);
+  panel.querySelector("#pomodoroDebugApply").addEventListener("click", handlePomodoroDebugApply);
   panel.querySelector("#pomodoroClose").addEventListener("click", closePomodoroPanel);
 
   return panel;
@@ -77,6 +93,10 @@ function getPomodoroPanel() {
 
 // Start delegates timer ownership to the background service worker.
 function handlePomodoroStart() {
+  pomodoroState = startPomodoro(pomodoroState);
+  savePopupPomodoroState(pomodoroState);
+  renderPomodoro(pomodoroState);
+  startPomodoroInterval();
   sendBackgroundMessage({ action: "pomodoro:start" }, response => {
     handlePomodoroResponse(response);
   });
@@ -84,6 +104,10 @@ function handlePomodoroStart() {
 
 // Pause asks the background service worker to account for elapsed time.
 function handlePomodoroPause() {
+  pomodoroState = pausePomodoro(pomodoroState);
+  savePopupPomodoroState(pomodoroState);
+  renderPomodoro(pomodoroState);
+  stopPomodoroInterval();
   sendBackgroundMessage({ action: "pomodoro:pause" }, response => {
     handlePomodoroResponse(response);
   });
@@ -91,8 +115,42 @@ function handlePomodoroPause() {
 
 // Reset clears the background alarm and returns the UI to the default state.
 function handlePomodoroReset() {
+  pomodoroState = resetPomodoro();
+  savePopupPomodoroState(pomodoroState);
+  renderPomodoro(pomodoroState);
+  stopPomodoroInterval();
   sendBackgroundMessage({ action: "pomodoro:reset" }, response => {
     handlePomodoroResponse(response);
+  });
+}
+
+// Toggle the developer-only controls inside the Pomodoro panel.
+function togglePomodoroDebugPanel() {
+  const debugPanel = document.getElementById("pomodoroDebugPanel");
+  debugPanel.hidden = !debugPanel.hidden;
+}
+
+// Apply manual timer values through the background-owned state path.
+function handlePomodoroDebugApply() {
+  const minutes = document.getElementById("pomodoroDebugMinutes").value;
+  const seconds = document.getElementById("pomodoroDebugSeconds").value;
+  const nextState = applyPomodoroDebugTime(pomodoroState, minutes, seconds);
+  const error = document.getElementById("pomodoroDebugError");
+
+  if (nextState.remainingSeconds === pomodoroState.remainingSeconds && nextState.lastUpdatedAt === pomodoroState.lastUpdatedAt) {
+    error.hidden = false;
+    return;
+  }
+
+  stopPomodoroInterval();
+  pomodoroState = nextState;
+  savePopupPomodoroState(pomodoroState);
+  renderPomodoro(pomodoroState);
+  sendBackgroundMessage({ action: "pomodoro:setDebugTime", minutes, seconds }, response => {
+    error.hidden = true;
+    if (response && response.success) {
+      handlePomodoroResponse(response);
+    }
   });
 }
 
@@ -117,16 +175,27 @@ function stopPomodoroInterval() {
   }
 }
 
-// Load current state from the background so reopened popups reflect elapsed time.
+// Load persisted timer state directly so reopened popups render before messaging.
 function loadPomodoroState() {
-  sendBackgroundMessage({ action: "pomodoro:getState" }, response => {
-    handlePomodoroResponse(response);
+  chrome.storage.local.get([pomodoroStateHelpers.POMODORO_STORAGE_KEY], data => {
+    pomodoroState = restorePomodoroState(data[pomodoroStateHelpers.POMODORO_STORAGE_KEY]);
+    renderPomodoro(pomodoroState);
+
+    if (pomodoroState.isRunning) {
+      startPomodoroInterval();
+    } else {
+      stopPomodoroInterval();
+    }
   });
 }
 
 // Apply successful background timer responses to the popup state and display.
 function handlePomodoroResponse(response) {
   if (!response || !response.success || !response.state) {
+    return;
+  }
+
+  if (response.state.lastUpdatedAt < pomodoroState.lastUpdatedAt) {
     return;
   }
 
@@ -145,6 +214,11 @@ function sendBackgroundMessage(message, callback) {
   chrome.runtime.sendMessage(message, response => {
     callback(response);
   });
+}
+
+// Persist immediate popup state so reopening reflects the last visible action.
+function savePopupPomodoroState(state) {
+  chrome.storage.local.set({ [pomodoroStateHelpers.POMODORO_STORAGE_KEY]: state });
 }
 
 // Render the current timer value and running/paused label.

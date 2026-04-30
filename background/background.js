@@ -27,12 +27,15 @@ const MESSAGE_ACTIONS = {
   pomodoroStart: "pomodoro:start",
   pomodoroPause: "pomodoro:pause",
   pomodoroReset: "pomodoro:reset",
+  pomodoroSetDebugTime: "pomodoro:setDebugTime",
   focusSetMode: "focus:setMode"
 };
 
 const {
   POMODORO_STORAGE_KEY,
+  applyPomodoroDebugTime,
   pausePomodoro,
+  parsePomodoroDebugSeconds,
   resetPomodoro,
   restorePomodoroState,
   startPomodoro,
@@ -105,6 +108,20 @@ async function handleMessageAsync(message) {
 
   if (message.action === MESSAGE_ACTIONS.pomodoroReset) {
     const state = resetPomodoro();
+    await setStorage({ [POMODORO_STORAGE_KEY]: state });
+    await clearPomodoroAlarm();
+    broadcastPomodoroState(state);
+
+    return { success: true, state };
+  }
+
+  if (message.action === MESSAGE_ACTIONS.pomodoroSetDebugTime) {
+    if (parsePomodoroDebugSeconds(message.minutes, message.seconds) === null) {
+      return { success: false, error: "Invalid debug time" };
+    }
+
+    const previousState = await readPomodoroState();
+    const state = applyPomodoroDebugTime(previousState, message.minutes, message.seconds);
     await setStorage({ [POMODORO_STORAGE_KEY]: state });
     await clearPomodoroAlarm();
     broadcastPomodoroState(state);

@@ -158,6 +158,34 @@ describe("FocusKit background service worker", () => {
     Date.now.mockRestore();
   });
 
+  test("applies and persists debug Pomodoro time through messages", async () => {
+    jest.spyOn(Date, "now").mockReturnValue(2000);
+    const { chrome } = loadBackground();
+
+    const debugged = await sendMessage(chrome, {
+      action: "pomodoro:setDebugTime",
+      minutes: "2",
+      seconds: "30"
+    });
+
+    expect(debugged.success).toBe(true);
+    expect(debugged.state.remainingSeconds).toBe(150);
+    expect(debugged.state.isRunning).toBe(false);
+    expect(chrome.__storage.pomodoroState).toEqual(debugged.state);
+    expect(chrome.alarms.clear).toHaveBeenCalledWith("focuskit:pomodoro", expect.any(Function));
+
+    const invalid = await sendMessage(chrome, {
+      action: "pomodoro:setDebugTime",
+      minutes: "-1",
+      seconds: "0"
+    });
+
+    expect(invalid.success).toBe(false);
+    expect(chrome.__storage.pomodoroState).toEqual(debugged.state);
+
+    Date.now.mockRestore();
+  });
+
   test("fires a completion notification and broadcasts state when the alarm expires", async () => {
     jest.spyOn(Date, "now").mockReturnValue(2000000);
     const { chrome } = loadBackground({

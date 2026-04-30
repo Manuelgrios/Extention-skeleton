@@ -213,6 +213,42 @@ body {
   border-color: var(--border);
 }
 
+.pomodoro-debug-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.pomodoro-debug-panel[hidden] {
+  display: none;
+}
+
+.pomodoro-debug-field {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.pomodoro-debug-input {
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 8px;
+  font-family: 'DM Mono', monospace;
+}
+
+.pomodoro-debug-error {
+  grid-column: 1 / -1;
+  color: var(--danger);
+  font-size: 10px;
+}
+
 /* Focus Modes */
 .focus-card {
   background: var(--surface);

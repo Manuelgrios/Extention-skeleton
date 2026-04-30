@@ -46,12 +46,19 @@ function expectDarkTheme(colors) {
   expect(luminance(colors.text)).toBeGreaterThan(220);
 }
 
+function displayToSeconds(displayValue) {
+  const [minutes, seconds] = displayValue.split(":").map(Number);
+
+  return (minutes * 60) + seconds;
+}
+
 async function expectPomodoroWorks(page) {
   await page.getByRole("button", { name: "Tools" }).click();
   await page.getByRole("button", { name: "Launch Pomodoro" }).click();
 
   const panel = page.locator("#pomodoroPanel");
   const display = page.locator("#pomodoroTime");
+  const debugPanel = page.locator("#pomodoroDebugPanel");
 
   await expect(panel).toBeVisible();
   await expect(display).toHaveText("25:00");
@@ -59,6 +66,23 @@ async function expectPomodoroWorks(page) {
   await expect(page.getByRole("button", { name: "Pause" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Reset" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Close" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Debug Time" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Debug Time" }).click();
+  await expect(debugPanel).toBeVisible();
+  await page.locator("#pomodoroDebugMinutes").fill("0");
+  await page.locator("#pomodoroDebugSeconds").fill("10");
+  await page.getByRole("button", { name: "Apply" }).click();
+  await expect(display).toHaveText("00:10");
+  await page.waitForFunction(() => new Promise(resolve => {
+    chrome.storage.local.get(["pomodoroState"], data => {
+      resolve(Boolean(
+        data.pomodoroState &&
+        data.pomodoroState.remainingSeconds === 10 &&
+        data.pomodoroState.isRunning === false
+      ));
+    });
+  }));
 
   await page.getByRole("button", { name: "Start" }).click();
   await page.waitForFunction(() => new Promise(resolve => {
@@ -68,7 +92,7 @@ async function expectPomodoroWorks(page) {
   }));
   await expect(page.locator("#pomodoroStatus")).toHaveText("Running");
 
-  await page.waitForFunction(() => document.querySelector("#pomodoroTime").textContent !== "25:00");
+  await page.waitForFunction(() => document.querySelector("#pomodoroTime").textContent !== "00:10");
   const runningDisplay = await display.textContent();
 
   await page.getByRole("button", { name: "Pause" }).click();
@@ -79,6 +103,15 @@ async function expectPomodoroWorks(page) {
   }));
   await expect(page.locator("#pomodoroStatus")).toHaveText("Paused");
   await expect(display).toHaveText(runningDisplay);
+  await page.waitForFunction((remainingSeconds) => new Promise(resolve => {
+    chrome.storage.local.get(["pomodoroState"], data => {
+      resolve(Boolean(
+        data.pomodoroState &&
+        data.pomodoroState.remainingSeconds === remainingSeconds &&
+        data.pomodoroState.isRunning === false
+      ));
+    });
+  }), displayToSeconds(runningDisplay));
 
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "Launch Pomodoro" }).click();
@@ -167,7 +200,8 @@ test("FocusKit popup renders core features without console errors", async () => 
     await expect(page.getByText("Notifications", { exact: true })).toBeVisible();
     await expect(page.getByText("Sound effects", { exact: true })).toBeVisible();
     await expect(page.getByText("Dark mode", { exact: true })).toBeVisible();
-    await expect(page.getByText("Auto-start timer", { exact: true })).toHaveCount(0);
+    await expect(page.locator("#tab-settings").getByText("Debug Time", { exact: true })).toHaveCount(0);
+    await expect(page.locator("#tab-settings").getByText("Auto-start timer", { exact: true })).toHaveCount(0);
 
     const notifications = page.locator("#settingNotifications");
     const sound = page.locator("#settingSound");

@@ -66,6 +66,37 @@ function resetPomodoro(now = Date.now()) {
   return createInitialPomodoroState(now);
 }
 
+// Parse debug inputs from the popup without letting malformed values alter state.
+function parsePomodoroDebugSeconds(minutesValue, secondsValue) {
+  const minutes = Number(minutesValue);
+  const seconds = Number(secondsValue);
+
+  if (!Number.isInteger(minutes) || !Number.isInteger(seconds)) {
+    return null;
+  }
+
+  if (minutes < 0 || seconds < 0 || seconds > 59) {
+    return null;
+  }
+
+  return (minutes * 60) + seconds;
+}
+
+// Apply a manual debug time and pause so the next Start begins from that value.
+function applyPomodoroDebugTime(state, minutesValue, secondsValue, now = Date.now()) {
+  const remainingSeconds = parsePomodoroDebugSeconds(minutesValue, secondsValue);
+
+  if (remainingSeconds === null) {
+    return { ...state };
+  }
+
+  return {
+    remainingSeconds,
+    isRunning: false,
+    lastUpdatedAt: now
+  };
+}
+
 // Normalize stored state so stale or malformed values cannot break the extension.
 function restorePomodoroState(savedState, now = Date.now()) {
   if (!savedState || typeof savedState.remainingSeconds !== "number") {
@@ -83,9 +114,11 @@ function restorePomodoroState(savedState, now = Date.now()) {
 const FocusKitPomodoroState = {
   POMODORO_DURATION_SECONDS,
   POMODORO_STORAGE_KEY,
+  applyPomodoroDebugTime,
   createInitialPomodoroState,
   formatTime,
   pausePomodoro,
+  parsePomodoroDebugSeconds,
   resetPomodoro,
   restorePomodoroState,
   startPomodoro,
