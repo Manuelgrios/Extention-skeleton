@@ -250,6 +250,24 @@ describe("FocusKit background service worker", () => {
     Date.now.mockRestore();
   });
 
+  test("handles the popup completion action with the same action name", async () => {
+    const { background, chrome } = loadBackground({
+      pomodoroCompletionVideoOpened: false
+    });
+
+    const response = await sendMessage(chrome, {
+      action: background.MESSAGE_ACTIONS.pomodoroComplete
+    });
+
+    expect(background.MESSAGE_ACTIONS.pomodoroComplete).toBe("pomodoro:complete");
+    expect(response.success).toBe(true);
+    expect(chrome.tabs.create).toHaveBeenCalledWith(
+      { url: background.POMODORO_COMPLETION_VIDEO_URL },
+      expect.any(Function)
+    );
+    expect(chrome.__storage.pomodoroCompletionVideoOpened).toBe(true);
+  });
+
   test("applies focus mode tab control and persists the chosen mode", async () => {
     const { chrome } = loadBackground();
 

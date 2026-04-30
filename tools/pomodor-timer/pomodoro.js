@@ -16,9 +16,12 @@ const {
   tickPomodoro
 } = pomodoroStateHelpers;
 
+const POMODORO_COMPLETE_ACTION = "pomodoro:complete";
+
 // Mutable popup session state; pure helpers below make this easy to test separately.
 let pomodoroState = createInitialPomodoroState(0);
 let pomodoroIntervalId = null;
+let pomodoroCompletionMessageSent = false;
 
 // Swap the Tools list for the Pomodoro panel and hydrate saved timer state.
 function openPomodoroPanel() {
@@ -93,6 +96,7 @@ function getPomodoroPanel() {
 
 // Start delegates timer ownership to the background service worker.
 function handlePomodoroStart() {
+  pomodoroCompletionMessageSent = false;
   pomodoroState = startPomodoro(pomodoroState);
   savePopupPomodoroState(pomodoroState);
   renderPomodoro(pomodoroState);
@@ -115,6 +119,7 @@ function handlePomodoroPause() {
 
 // Reset clears the background alarm and returns the UI to the default state.
 function handlePomodoroReset() {
+  pomodoroCompletionMessageSent = false;
   pomodoroState = resetPomodoro();
   savePopupPomodoroState(pomodoroState);
   renderPomodoro(pomodoroState);
@@ -143,6 +148,7 @@ function handlePomodoroDebugApply() {
   }
 
   stopPomodoroInterval();
+  pomodoroCompletionMessageSent = false;
   pomodoroState = nextState;
   savePopupPomodoroState(pomodoroState);
   renderPomodoro(pomodoroState);
@@ -158,13 +164,34 @@ function handlePomodoroDebugApply() {
 function startPomodoroInterval() {
   stopPomodoroInterval();
   pomodoroIntervalId = setInterval(() => {
+    const previousState = pomodoroState;
     pomodoroState = tickPomodoro(pomodoroState);
     renderPomodoro(pomodoroState);
+
+    if (didPomodoroComplete(previousState, pomodoroState)) {
+      sendPomodoroCompletionMessageOnce();
+    }
 
     if (!pomodoroState.isRunning) {
       stopPomodoroInterval();
     }
   }, 1000);
+}
+
+function didPomodoroComplete(previousState, nextState) {
+  return previousState.isRunning &&
+    previousState.remainingSeconds > 0 &&
+    !nextState.isRunning &&
+    nextState.remainingSeconds === 0;
+}
+
+function sendPomodoroCompletionMessageOnce() {
+  if (pomodoroCompletionMessageSent) {
+    return;
+  }
+
+  pomodoroCompletionMessageSent = true;
+  sendBackgroundMessage({ action: POMODORO_COMPLETE_ACTION }, () => {});
 }
 
 // Clear the active interval when the panel closes, pauses, resets, or completes.
@@ -212,6 +239,12 @@ function handlePomodoroResponse(response) {
 // Send background commands through the MV3 message channel.
 function sendBackgroundMessage(message, callback) {
   chrome.runtime.sendMessage(message, response => {
+    if (chrome.runtime.lastError) {
+      console.error(`FocusKit background message failed: ${chrome.runtime.lastError.message}`);
+      callback({ success: false, error: chrome.runtime.lastError.message });
+      return;
+    }
+
     callback(response);
   });
 }
@@ -243,5 +276,9 @@ if (typeof window !== "undefined") {
 
 // Export pure timer helpers for Jest.
 if (typeof module !== "undefined") {
-  module.exports = pomodoroStateHelpers;
+  module.exports = {
+    ...pomodoroStateHelpers,
+    POMODORO_COMPLETE_ACTION,
+    didPomodoroComplete
+  };
 }

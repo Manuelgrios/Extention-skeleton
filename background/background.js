@@ -1,18 +1,21 @@
 // background.js - MV3 service worker for timers, notifications, tabs, and popup messages.
 
-// Load shared Pomodoro state helpers when running as a Chrome service worker.
-if (typeof importScripts === "function" && typeof FocusKitPomodoroState === "undefined") {
+// Load shared helpers when running as a Chrome service worker.
+if (typeof importScripts === "function" && !globalThis.FocusKitPomodoroState) {
   importScripts("../tools/pomodor-timer/pomodoroState.js");
+}
+
+if (typeof importScripts === "function" && !globalThis.FocusKitModes) {
   importScripts("../tools/focus-modes/focusModes.js");
 }
 
 // Reuse shared state helpers in Jest without duplicating timer rules in the worker.
-const pomodoroHelpers = typeof FocusKitPomodoroState !== "undefined"
-  ? FocusKitPomodoroState
+const pomodoroHelpers = globalThis.FocusKitPomodoroState
+  ? globalThis.FocusKitPomodoroState
   : require("../tools/pomodor-timer/pomodoroState.js");
 
-const focusModeHelpers = typeof FocusKitModes !== "undefined"
-  ? FocusKitModes
+const focusModeHelpers = globalThis.FocusKitModes
+  ? globalThis.FocusKitModes
   : require("../tools/focus-modes/focusModes.js");
 
 // Keep background command names centralized so popup and tests use one message surface.
@@ -22,6 +25,7 @@ const POMODORO_COMPLETE_NOTIFICATION_ID = "focuskit-pomodoro-complete";
 const POMODORO_BREAK_NOTIFICATION_ID = "focuskit-pomodoro-break";
 const POMODORO_COMPLETION_VIDEO_OPENED_KEY = "pomodoroCompletionVideoOpened";
 const POMODORO_COMPLETION_VIDEO_URL = "https://www.youtube.com/shorts/BdzZVvWoP-Y";
+let pomodoroCompletionVideoOpening = false;
 
 const MESSAGE_ACTIONS = {
   ping: "ping",
@@ -30,6 +34,7 @@ const MESSAGE_ACTIONS = {
   pomodoroPause: "pomodoro:pause",
   pomodoroReset: "pomodoro:reset",
   pomodoroSetDebugTime: "pomodoro:setDebugTime",
+  pomodoroComplete: "pomodoro:complete",
   focusSetMode: "focus:setMode"
 };
 
@@ -140,6 +145,12 @@ async function handleMessageAsync(message) {
     return { success: true, state };
   }
 
+  if (message.action === MESSAGE_ACTIONS.pomodoroComplete) {
+    await openPomodoroCompletionPlaceholderOnce();
+
+    return { success: true };
+  }
+
   if (message.action === MESSAGE_ACTIONS.focusSetMode) {
     return applyFocusMode(message.modeId);
   }
@@ -178,25 +189,36 @@ async function handleAlarm(alarm) {
 
 // Temporary removable Pomodoro completion placeholder.
 async function openPomodoroCompletionPlaceholderOnce() {
+  if (pomodoroCompletionVideoOpening) {
+    return;
+  }
+
   const data = await getStorage([POMODORO_COMPLETION_VIDEO_OPENED_KEY]);
 
   if (data[POMODORO_COMPLETION_VIDEO_OPENED_KEY]) {
     return;
   }
 
-  await openPomodoroCompletionVideo();
-  await setStorage({ [POMODORO_COMPLETION_VIDEO_OPENED_KEY]: true });
+  pomodoroCompletionVideoOpening = true;
+
+  try {
+    await setStorage({ [POMODORO_COMPLETION_VIDEO_OPENED_KEY]: true });
+    await openPomodoroCompletionVideo();
+  } finally {
+    pomodoroCompletionVideoOpening = false;
+  }
 }
 
 function openPomodoroCompletionVideo() {
-  return new Promise(resolve => {
-    if (!chrome.tabs || !chrome.tabs.create) {
-      resolve();
-      return;
-    }
+  if (!chrome.tabs || !chrome.tabs.create) {
+    return Promise.resolve();
+  }
 
-    chrome.tabs.create({ url: POMODORO_COMPLETION_VIDEO_URL }, () => resolve());
+  chrome.tabs.create({ url: POMODORO_COMPLETION_VIDEO_URL }, () => {
+    void chrome.runtime.lastError;
   });
+
+  return Promise.resolve();
 }
 
 // Read, normalize, persist, and return the current timer state.

@@ -4,6 +4,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { test, expect, chromium } = require("@playwright/test");
+const { POMODORO_COMPLETION_VIDEO_URL } = require("../background/background.js");
 
 const extensionPath = path.resolve(__dirname, "..");
 
@@ -52,6 +53,64 @@ function displayToSeconds(displayValue) {
   return (minutes * 60) + seconds;
 }
 
+async function applyDebugTime(page, minutes, seconds) {
+  const debugPanel = page.locator("#pomodoroDebugPanel");
+
+  if (await debugPanel.isHidden()) {
+    await page.locator("#pomodoroDebugToggle").click();
+  }
+
+  await page.locator("#pomodoroDebugMinutes").fill(minutes);
+  await page.locator("#pomodoroDebugSeconds").fill(seconds);
+  await page.getByRole("button", { name: "Apply" }).click();
+}
+
+async function expectCompletionVideoPage(videoPage) {
+  await expect.poll(() => videoPage.url(), { timeout: 15000 })
+    .toContain(POMODORO_COMPLETION_VIDEO_URL);
+}
+
+async function expectPomodoroCompletionOpensVideoOnce(context, page) {
+  await page.getByRole("button", { name: "Tools" }).click();
+  await page.getByRole("button", { name: "Launch Pomodoro" }).click();
+
+  const panel = page.locator("#pomodoroPanel");
+  const display = page.locator("#pomodoroTime");
+  await expect(panel).toBeVisible();
+
+  await applyDebugTime(page, "0", "1");
+  await expect(display).toHaveText("00:01");
+
+  const pagesBeforeFirstCompletion = context.pages().length;
+  const firstVideoPromise = context.waitForEvent("page");
+  await page.getByRole("button", { name: "Start" }).click();
+  await expect(display).toHaveText("00:00", { timeout: 5000 });
+  const firstVideoPage = await firstVideoPromise;
+  await expectCompletionVideoPage(firstVideoPage);
+
+  await page.waitForTimeout(1500);
+  expect(context.pages().length).toBe(pagesBeforeFirstCompletion + 1);
+
+  await firstVideoPage.close();
+  await page.bringToFront();
+  await page.getByRole("button", { name: "Reset" }).click();
+  await applyDebugTime(page, "0", "1");
+
+  const pagesBeforeSecondCompletion = context.pages().length;
+  const secondVideoPromise = context.waitForEvent("page");
+  await page.getByRole("button", { name: "Start" }).click();
+  await expect(display).toHaveText("00:00", { timeout: 5000 });
+  const secondVideoPage = await secondVideoPromise;
+  await expectCompletionVideoPage(secondVideoPage);
+  expect(context.pages().length).toBe(pagesBeforeSecondCompletion + 1);
+
+  await secondVideoPage.close();
+  await page.bringToFront();
+  await page.getByRole("button", { name: "Reset" }).click();
+  await page.getByRole("button", { name: "Close" }).click();
+  await expect(panel).toBeHidden();
+}
+
 async function expectPomodoroWorks(page) {
   await page.getByRole("button", { name: "Tools" }).click();
   await page.getByRole("button", { name: "Launch Pomodoro" }).click();
@@ -68,11 +127,8 @@ async function expectPomodoroWorks(page) {
   await expect(page.getByRole("button", { name: "Close" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Debug Time" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Debug Time" }).click();
+  await applyDebugTime(page, "0", "10");
   await expect(debugPanel).toBeVisible();
-  await page.locator("#pomodoroDebugMinutes").fill("0");
-  await page.locator("#pomodoroDebugSeconds").fill("10");
-  await page.getByRole("button", { name: "Apply" }).click();
   await expect(display).toHaveText("00:10");
   await page.waitForFunction(() => new Promise(resolve => {
     chrome.storage.local.get(["pomodoroState"], data => {
@@ -183,6 +239,7 @@ test("FocusKit popup renders core features without console errors", async () => 
     await expect(page.getByText("Iris", { exact: true })).toBeVisible();
     await expect(page.getByText("Eisenhower", { exact: true })).toBeVisible();
     await expectPomodoroWorks(page);
+    await expectPomodoroCompletionOpensVideoOnce(context, page);
 
     const initialDarkSurfaceColors = await readComputedColors(popupSurface);
     const initialDarkCardColors = await readComputedColors(firstToolCard);

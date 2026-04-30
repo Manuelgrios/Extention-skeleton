@@ -1,5 +1,6 @@
 // focusModes.js - CRUD operations and storage for user-created focus modes.
 
+(() => {
 // Storage key used by both this module and background.js.
 const FOCUS_MODES_STORAGE_KEY = "focusKit:focusModes";
 const ACTIVE_MODE_STORAGE_KEY = "focusMode";
@@ -116,27 +117,22 @@ function deleteFocusMode(modeId, callback) {
   });
 }
 
-// Expose for popup and tests.
-if (typeof window !== "undefined") {
-  window.FocusKitModes = {
-    FOCUS_MODES_STORAGE_KEY,
-    DEFAULT_FOCUS_MODES,
-    loadFocusModes,
-    saveFocusModes,
-    createFocusMode,
-    updateFocusMode,
-    deleteFocusMode
-  };
+const FocusKitModes = {
+  FOCUS_MODES_STORAGE_KEY,
+  DEFAULT_FOCUS_MODES,
+  loadFocusModes,
+  saveFocusModes,
+  createFocusMode,
+  updateFocusMode,
+  deleteFocusMode
+};
+
+// Expose for popup, service worker, and tests.
+if (typeof globalThis !== "undefined") {
+  globalThis.FocusKitModes = FocusKitModes;
 }
 
 if (typeof module !== "undefined") {
-  module.exports = {
-    FOCUS_MODES_STORAGE_KEY,
-    DEFAULT_FOCUS_MODES,
-    loadFocusModes,
-    saveFocusModes,
-    createFocusMode,
-    updateFocusMode,
-    deleteFocusMode
-  };
+  module.exports = FocusKitModes;
 }
+})();
