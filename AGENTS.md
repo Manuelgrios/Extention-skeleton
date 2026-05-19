@@ -26,6 +26,24 @@ Every pull request must be reviewed by at least one other team member before mer
 Codex may commit and push branches after required checks pass.
 Codex must not merge pull requests.
 
+## Sprint 2 Execution 2 CI/CD audit notes
+
+The team `main` branch includes the hand-built PowerShell deployment pipeline
+at `scripts/deploy.ps1`, the RESTful Flask Docker API in `flask-server`, and
+README instructions for running the pipeline.
+
+The deployment script must keep the current branch checked out, fetch
+`upstream/main`, fast-forward only when safe, run static analysis and tests,
+build the Flask Docker image, deploy the `focuskit-prod` container, and verify
+`http://localhost:5000/api/health`.
+
+For the Sprint 2 rubric, README.md should list all PRs merged in the accepted
+week and note whether teammate review evidence is visible. During the May 18,
+2026 audit, PR #9 had a visible submitted approval. PRs #8, #10, #11, #13,
+#14, #16, #19, and #20 did not show submitted review records through the
+GitHub Pull Request Reviews API, so any external review evidence should be
+included in the assignment submission.
+
 ## Git workflow
 
 After implementing a task:

@@ -112,11 +112,35 @@ http://localhost:5000/api/health
 
 ## PR Links Accepted In The Past Week
 
-- PR #20:
+- PR #20: Add minimal Flask Docker server
   https://github.com/Sp2026-CSS-360-Group-Project/Extention-skeleton/pull/20
+- PR #19: agent.md revision
+  https://github.com/Sp2026-CSS-360-Group-Project/Extention-skeleton/pull/19
+- PR #16: Add GitHub Actions CI workflow for static analysis enforcement
+  https://github.com/Sp2026-CSS-360-Group-Project/Extention-skeleton/pull/16
+- PR #14: Add npm audit security analysis documentation
+  https://github.com/Sp2026-CSS-360-Group-Project/Extention-skeleton/pull/14
+- PR #10: Restore Pomodoro Timer Countdown
+  https://github.com/Sp2026-CSS-360-Group-Project/Extention-skeleton/pull/10
+- PR #13: Add Prettier formater with eslint-config-prettier
+  https://github.com/Sp2026-CSS-360-Group-Project/Extention-skeleton/pull/13
+- PR #11: Local Storage Layer - Wire settings to storage abstraction layer
+  https://github.com/Sp2026-CSS-360-Group-Project/Extention-skeleton/pull/11
+- PR #9: Create ESLint linter for JS static analysis
+  https://github.com/Sp2026-CSS-360-Group-Project/Extention-skeleton/pull/9
+- PR #8: Focus Mode CRUD - Icon for Notifications and Extension,
+  Notification System
+  https://github.com/Sp2026-CSS-360-Group-Project/Extention-skeleton/pull/8
 
 PRs must pass static analysis and be reviewed by at least one other teammate
 before merging.
+
+Review evidence note: GitHub's submitted review records are visible for PR #9.
+For PRs #8, #10, #11, #13, #14, #16, #19, and #20, no submitted review records
+were visible through the GitHub Pull Request Reviews API during the Sprint 2
+Execution 2 CI/CD audit on May 18, 2026. If those PRs were reviewed through
+comments, meetings, or another channel, include that evidence in the assignment
+submission.
 
 This repo will be the base of our chrome extentions
 
